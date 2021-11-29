@@ -17,8 +17,8 @@ import plotly.offline as of  	# 这个为离线模式的导入方法
 from prettytable import PrettyTable
 from prettytable import from_csv
 from Class import Sku,Section,Order,Time,CostList
-from Functions import Func_ReadCsv_SkuTime,Func_ReadCsv_SkuSection,Func_ReadCsv_SkuOrder,Func_Cost_sequence,\
-    print_table,display_order_list,randomcolor
+from Functions import Func_ReadCsv_SkuTime,Func_ReadCsv_SkuSection,Func_ReadCsv_SkuOrder_new,Func_Cost_sequence,\
+    print_table,display_order_list,randomcolor,Func_ReadCsv_SkuOrder,Func_Cost_sequence_better
 
 class Simulation:
     def __init__(self, simulation_config):
@@ -27,6 +27,7 @@ class Simulation:
         self.path_order_sku_map = simulation_config['path_order_sku_map']
         self.path_sku_time_map=simulation_config['path_sku_time_map']
         self.type=simulation_config['type']
+        self.pace=simulation_config['pace']
 
         # 1、初始化section
         self.num_section = simulation_config['num_section']
@@ -40,6 +41,7 @@ class Simulation:
         self.order_notstart = []  # 未发出的order
         self.order_start = []  # 已经开始流转的order
         self.order_finish = []  # 已经流转结束的order
+        self.order_before_section=-1
 
         # 初始化
         self.init_section()
@@ -143,6 +145,8 @@ class Simulation:
 
         for i in range(0, (self.num_order)):
             # 提炼工序
+            # work_schedule=[]
+            # work_schedule.append(list(work_schedule_dic.items()))
             work_schedule_dic=Func_ReadCsv_SkuOrder(i=i,num_sku=self.num_sku,data=data,section_list=self.section_list,sku_list=self.sku_list)
             work_schedule=list(work_schedule_dic.items())
 
@@ -171,6 +175,9 @@ class Simulation:
             # print(order.work_schedule_dic)
             # print('list',end=':')
             # print(order.work_schedule)
+
+    # def run_initorder(self):
+    #     print('run_init_order')
 
     def Func_Order_filter(self):
         order_fluent = []  # 筛选在mainstream上可以不堵的订单
@@ -219,6 +226,7 @@ class Simulation:
                 break
         return section_now_num,schedule_now_num
 
+    # 新测试的代码
     def Func_Assign_Order(self,time):
         # 1\过滤可能有堵塞问题的订单
         order_can, order_fluent = self.Func_Order_filter()
@@ -226,7 +234,10 @@ class Simulation:
         if (len(order_can) > 0):
             # 求出最小cost订单对应的序号（它在order_list中的顺序就是他的num）
             # 所以self.order_list[order_now_num]就是被选派的订单
-            order_now = Func_Cost_sequence(order_can, self.section_list,self.order_list)
+
+            # order_now = Func_Cost_sequence(order_can, self.section_list,self.order_list,self.order_before_section)
+            order_now = Func_Cost_sequence_better(order_can, self.section_list,self.order_list,self.order_before_section)
+
         else:
             if (len(order_fluent) != 0):
                 print("section已满，本轮无订单被派发")
@@ -240,17 +251,23 @@ class Simulation:
 
         # 4\在section等待队列中加入订单信息(订单序号，订单在该区用时)
         self.section_list[order_now.now_section_num].Add_to_waiting_order_list(order_now,time)
+        #更新order_before_section：上一个派发订单第一个取得非主路section
+        self.order_before_section=order_now.now_section_num
 
         # 5\修改订单信息
         # time_enter_section记录
         order_now.time.time_enter_section=time
 
+
+
         # 6\在未发出订单信息中删除order_now
         for i in range(len(self.order_notstart)):
             if (self.order_notstart[i].name == order_now.name):
+                self.order_start.append(self.order_notstart[i])
                 self.order_notstart.pop(i)
                 break
 
+    # 发网原始算法
     def Func_Assign_Order_Origin(self,time):
         # 1\过滤可能有堵塞问题的订单
         order_can, order_fluent = self.Func_Order_filter()
@@ -292,6 +309,7 @@ class Simulation:
         # 6\在未发出订单信息中删除order_now
         for i in range(len(self.order_notstart)):
             if (self.order_notstart[i].name == order_now.name):
+                self.order_start.append(self.order_notstart[i])
                 self.order_notstart.pop(i)
                 break
 
@@ -455,20 +473,22 @@ class Simulation:
 
 
     def run(self):
-        for t in range(1,self.T):
+        for t in range(0,self.T):
 
             print("\n")
             print(
                 "--------------------------\n     当前时刻为%d\n--------------------------" %
                 t)
-            # step1：下发新的订单
-            if(len(self.order_notstart)!=0):
-                if(self.type=='new'):
-                    self.Func_Assign_Order(time=t)
-                elif (self.type == 'origin'):
-                    self.Func_Assign_Order_Origin(time=t)
-            else:
-                print('*********无order可派发*********\n')
+
+        # step1：下发新的订单
+            if(t%self.pace==0):
+                if(len(self.order_notstart)!=0):
+                    if(self.type=='new'):
+                        self.Func_Assign_Order(time=t)
+                    elif (self.type == 'origin'):
+                        self.Func_Assign_Order_Origin(time=t)
+                else:
+                    print('*********无order可派发*********\n')
 
             # 画图
             self.x_t.append(t)
@@ -478,7 +498,7 @@ class Simulation:
             self.display_order_list_mainsec()
             # self.display_order_list_all_section()
 
-            # step2：对每个section进行正序遍历，依次完成当前section中的任务
+        # step2：对每个section进行正序遍历，依次完成当前section中的任务
             print('\n*********对各section中订单进行遍历，依次完成*********')
             for i in range(0, 6):
                 self.section_list[i].Process_order(time=t)
@@ -486,7 +506,7 @@ class Simulation:
             # print('各section完成初始订单后：')
             # self.display_order_list_all_section()
 
-            # step3：对每个section+mainstream进行倒序遍历，依次对section中finish的订单进行移动
+        # step3：对每个section+mainstream进行倒序遍历，依次对section中finish的订单进行移动
             list_test = [5, 4, -2, 3, 2, -1, 1, 0]
             for list_num in list_test:
                 section_now = self.section_list[list_num]
@@ -520,8 +540,10 @@ class Simulation:
                 break
 
 
-        print('[Order：%d ' % self.num_order,'Sku：%d]' % self.num_sku)
+        print('[Order：%d ' % self.num_order,'Sku：%d]' % self.num_sku,',%s'%self.type)
         print('完成全部订单共计循环次数：%d' % T_last)
+        # for order in self.order_list:
+        #     print(order.work_schedule)
 
 if __name__ == "__main__":
     start = tm.perf_counter()  # 记录当前时刻
@@ -532,22 +554,23 @@ if __name__ == "__main__":
         'T': 100000,  # 仿真时长
         'num_section': 6,
 
-        # 'type':'new',
-        'type':'origin',
+        'type':'new',
+        # 'type':'origin',
+        'pace':1,
 
         # # 初始数据
         # 'path_sku_section_map': cwd + '/input/SkuSectionMap_0922.csv',
         # 'path_sku_time_map': cwd + '/input/SkuTimeMap_0922.csv',
-        # # 'path_order_sku_map': cwd + '/input/OrderSkuMap_0924.csv',
+        # 'path_order_sku_map': cwd + '/input/OrderSkuMap_0924.csv',
         #
         # 'path_order_sku_map': cwd + '/OrderSkuMap_1118.csv',
 
         # ONum3432_SNum444
-        # 'path_sku_section_map': cwd + '/datas/ONum3432_SNum444/SkuSectionMap_ONum3432_SNum444_930_heuristic.csv',
-        # 'path_order_sku_map': cwd + '/datas/ONum3432_SNum444/OrderSKUMap_ONum3432_SNum444_930_heuristic.csv',
-        # 'path_sku_time_map': cwd + '//datas/ONum3432_SNum444/SkuTimeMap_SNum444_930_heuristic.csv',
+        'path_sku_section_map': cwd + '/datas/ONum3432_SNum444/SkuSectionMap_ONum3432_SNum444_930_heuristic.csv',
+        'path_order_sku_map': cwd + '/datas/ONum3432_SNum444/OrderSKUMap_ONum3432_SNum444_930_heuristic.csv',
+        'path_sku_time_map': cwd + '//datas/ONum3432_SNum444/SkuTimeMap_SNum444_930_heuristic.csv',
 
-        # ONum5610_SNum399
+        # # ONum5610_SNum399
         # 'path_sku_section_map': cwd + '/datas/ONum5610_SNum399/SkuSectionMap_ONum5610_SNum399_930_heuristic.csv',
         # 'path_sku_time_map': cwd + '//datas/ONum5610_SNum399/SkuTimeMap_SNum399_930_heuristic.csv',
         # 'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic.csv',
@@ -555,14 +578,14 @@ if __name__ == "__main__":
         # 'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic_test_1.csv',
 
         # ONum6544_SNum537
-        'path_sku_section_map': cwd + '/datas/ONum6544_SNum537/SkuSectionMap_ONum6544_SNum537_930_heuristic.csv',
-        'path_order_sku_map': cwd + '/datas/ONum6544_SNum537/OrderSKUMap_ONum6544_SNum537_930_heuristic.csv',
-        'path_sku_time_map': cwd + '//datas/ONum6544_SNum537/SkuTimeMap_SNum537_930_heuristic.csv',
+        # 'path_sku_section_map': cwd + '/datas/ONum6544_SNum537/SkuSectionMap_ONum6544_SNum537_930_heuristic.csv',
+        # 'path_order_sku_map': cwd + '/datas/ONum6544_SNum537/OrderSKUMap_ONum6544_SNum537_930_heuristic.csv',
+        # 'path_sku_time_map': cwd + '//datas/ONum6544_SNum537/SkuTimeMap_SNum537_930_heuristic.csv',
     }
     simulation_1 = Simulation(simulation_config)
 
     simulation_1.run()
-
+    # simulation_1.run_initorder()
     end = tm.perf_counter()
     print("程序共计用时 : %s Seconds " % (end - start))
 

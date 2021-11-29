@@ -20,6 +20,7 @@ class Sku:
         self.sku_time = sku_config['sku_time']  # sku处理所需时间
         self.sku_location_list = sku_config['sku_location_list']  # sku所在分区信息
 
+
 class Section:
     def __init__(self,section_config):
         self.name=section_config['name']  # 分区名称
@@ -94,7 +95,7 @@ class Order:
     def Cost_cal(self,section_list):
         j = 0
         cost=0
-        weight=[1,0.8,0.5,0.3]
+        weight=[1,0.8,0.5]
             # print(j)
         for i in range(len(self.work_schedule)):
             if (int(self.work_schedule[i][0]) < 0):  # 如果第i步为mainstream，跳过这一步判断下一步是否还为mainstream
