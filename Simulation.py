@@ -79,6 +79,9 @@ class Simulation:
 
         self.fig = plt.figure()
 
+        self.main_jam_1=0 #主路的拥堵情况
+        self.main_jam_2=0 #主路的拥堵情况
+
 
     def init_section(self):
         # 初始化6个section信息：分区名称、正在等待的订单数量、处理订单列表
@@ -170,15 +173,6 @@ class Simulation:
             self.order_list.append(Order(order_input))
             self.order_notstart.append(Order(order_input))
 
-        # for order in self.order_list:
-            # print('dic')
-            # print(order.work_schedule_dic)
-            # print('list',end=':')
-            # print(order.work_schedule)
-
-    # def run_initorder(self):
-    #     print('run_init_order')
-
     def Func_Order_filter(self):
         order_fluent = []  # 筛选在mainstream上可以不堵的订单
         order_can = []  # 进而筛选在section中排队次数小于6次的订单
@@ -258,8 +252,6 @@ class Simulation:
         # time_enter_section记录
         order_now.time.time_enter_section=time
 
-
-
         # 6\在未发出订单信息中删除order_now
         for i in range(len(self.order_notstart)):
             if (self.order_notstart[i].name == order_now.name):
@@ -293,7 +285,6 @@ class Simulation:
             else:
                 print("主干道堵塞，本轮无订单被派发")
             return 0
-
 
         # 3\赋予section_now为order_now第一个不为负的section，得到第一个不为负section的编号和当前order所处的工序
         order_now.now_section_num,order_now.now_schedule_num=self.Find_Section_now_num(order_now)
@@ -402,7 +393,6 @@ class Simulation:
     def plot_results_plotly(self):
         # 用plotly画图
         fig = make_subplots(
-
             rows=8, cols=1,
             subplot_titles=("section_<b>0</b>",
                              "section_<b>1</b>",
@@ -425,12 +415,6 @@ class Simulation:
                 exec("fig.add_trace(self.plot_scatter(self.y_{},'section_<b>%d</b> all'%{},key='all'),row=i+1,col=1)".format(i,i))
                 # exec("fig.add_trace(self.plot_scatter(self.y_{}_waiting, 'section_<b>%d</b> waiting' % {},key='waiting'), row=i + 1, col=1)".format(i,i))
                 # exec("fig.add_trace(self.plot_scatter(self.y_{}_process, 'section_<b>%d</b> process' % {},key='process'), row=i + 1, col=1)".format(i,i))
-
-        # fig.update_layout(
-        #     title='各时段分区订单累积情况',  # 定义生成的plot 的标题
-        #     # xaxis_title='时间',  # 定义x坐标名称
-        #     yaxis_title='订单数'  # 定义y坐标名称
-        # )
 
         layout = go.Layout(title='各时段分区订单累积情况',  # 定义生成的plot 的标题
             # xaxis_title='时间',  # 定义x坐标名称
@@ -470,7 +454,6 @@ class Simulation:
                 exec("self.y_{}.append(a)".format(i))
                 exec("self.y_{}_waiting.append(len(self.section_list[i].waiting_order_list))".format(i))
                 exec("self.y_{}_process.append(len(self.section_list[i].process_order_list))".format(i))
-
 
     def run(self):
         for t in range(0,self.T):
@@ -530,6 +513,12 @@ class Simulation:
             print('order_finish:', end='')
             display_order_list(self.order_finish)
 
+            # 记录主路堵车次数
+            if(len(self.section_list[7].finish_order_list)!=0):
+                self.main_jam_1 =self.main_jam_1+1   # 主路的拥堵情况
+            if (len(self.section_list[6].finish_order_list) != 0):
+                self.main_jam_2 = self.main_jam_2 + 1  # 主路的拥堵情况
+
             # # 画图
             # self.x_t.append(t)
             # self.save_y_t()
@@ -542,6 +531,8 @@ class Simulation:
 
         print('[Order：%d ' % self.num_order,'Sku：%d]' % self.num_sku,',%s'%self.type)
         print('完成全部订单共计循环次数：%d' % T_last)
+        print('主路-1拥堵情况：%d' % self.main_jam_1,'主路-2拥堵情况：%d' % self.main_jam_2)
+
         # for order in self.order_list:
         #     print(order.work_schedule)
 
@@ -566,14 +557,14 @@ if __name__ == "__main__":
         # 'path_order_sku_map': cwd + '/OrderSkuMap_1118.csv',
 
         # ONum3432_SNum444
-        'path_sku_section_map': cwd + '/datas/ONum3432_SNum444/SkuSectionMap_ONum3432_SNum444_930_heuristic.csv',
-        'path_order_sku_map': cwd + '/datas/ONum3432_SNum444/OrderSKUMap_ONum3432_SNum444_930_heuristic.csv',
-        'path_sku_time_map': cwd + '//datas/ONum3432_SNum444/SkuTimeMap_SNum444_930_heuristic.csv',
+        # 'path_sku_section_map': cwd + '/datas/ONum3432_SNum444/SkuSectionMap_ONum3432_SNum444_930_heuristic.csv',
+        # 'path_order_sku_map': cwd + '/datas/ONum3432_SNum444/OrderSKUMap_ONum3432_SNum444_930_heuristic.csv',
+        # 'path_sku_time_map': cwd + '//datas/ONum3432_SNum444/SkuTimeMap_SNum444_930_heuristic.csv',
 
         # # ONum5610_SNum399
-        # 'path_sku_section_map': cwd + '/datas/ONum5610_SNum399/SkuSectionMap_ONum5610_SNum399_930_heuristic.csv',
-        # 'path_sku_time_map': cwd + '//datas/ONum5610_SNum399/SkuTimeMap_SNum399_930_heuristic.csv',
-        # 'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic.csv',
+        'path_sku_section_map': cwd + '/datas/ONum5610_SNum399/SkuSectionMap_ONum5610_SNum399_930_heuristic.csv',
+        'path_sku_time_map': cwd + '//datas/ONum5610_SNum399/SkuTimeMap_SNum399_930_heuristic.csv',
+        'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic.csv',
 
         # 'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic_test_1.csv',
 

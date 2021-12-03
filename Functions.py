@@ -239,8 +239,10 @@ def Func_Cost_sequence_better(order_can,section_list,order_list,order_before_sec
 # 优化3：很闲的时候(所有section无订单)，先做最复杂的
     section_all_num=0
     for section in section_list:
+        # 1\很闲时所有类型订单为空
         section_all_num=section_all_num+len(section.finish_order_list)+len(section.waiting_order_list)+len(section.process_order_list)
-
+        # 2\(效果更好)很闲时所有订单只有waiting订单为空
+        # section_all_num=section_all_num+len(section.waiting_order_list)
     if(section_all_num==0):
         print('系统很闲！')
         for order in order_list:
