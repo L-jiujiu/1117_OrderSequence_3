@@ -14,18 +14,16 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import plotly.offline as of  	# 这个为离线模式的导入方法
 
-from prettytable import PrettyTable
-from prettytable import from_csv
 from Class import Sku,Section,Order,Time,CostList
-from Functions import Func_ReadCsv_SkuTime,Func_ReadCsv_SkuSection,Func_ReadCsv_SkuOrder_new,Func_Cost_sequence,\
-    print_table,display_order_list,randomcolor,Func_ReadCsv_SkuOrder,Func_Cost_sequence_better
+from Functions_new1214 import Func_Cost_sequence,Func_Cost_sequence_better,Func_Cost_sequence_better_more,\
+    print_table,display_order_list,randomcolor
 
 class Simulation:
     def __init__(self, simulation_config):
         self.T = simulation_config['T']
-        self.path_sku_section_map = simulation_config['path_sku_section_map']
         self.path_order_sku_map = simulation_config['path_order_sku_map']
         self.path_sku_time_map=simulation_config['path_sku_time_map']
+
         self.type=simulation_config['type']
         self.pace=simulation_config['pace']
 
@@ -88,14 +86,14 @@ class Simulation:
         print('所有Section个数为：%d' % self.num_section,'主干道中转站个数为：2')
         for i in range(0,(self.num_section),1):
             section_input = {
-                'name': 'section_{}'.format(i),  # 分区名称
+                'name': str(i+17)+'01',  # 分区名称
                 'num': i,  # 分区序号
                 'max_order_num':6  #最多停滞order数量
             }
             self.section_list.append(Section(section_input))
 
         for j in range(-2,0,1):
-            print(j)
+            # print(j)
             section_input = {
                 'name': 'section_{}'.format(j),  # 分区名称
                 'num': j,  # 分区序号
@@ -104,8 +102,8 @@ class Simulation:
             }
             self.section_list.append(Section(section_input))
         # 显示当前section命名方式，可以用section_list[-1]调用第一个mainstream节点，-2调用第二个
-        for section in self.section_list:
-            print(section.name)
+        # for section in self.section_list:
+        #     print(section.name)
         # 测试数据
         # print('section_list[-2]=%d'%self.section_list[-2].num)
 
@@ -114,64 +112,80 @@ class Simulation:
 
     def init_sku(self):
         # 初始化sku所在的分区：sku名称，sku处理所需时间、sku所在分区
-        # Sku所在分区信息
-        sku_section_data = np.genfromtxt(self.path_sku_section_map,delimiter=",")  # 打开Excel文件
-        # Sku的处理时长信息
-        sku_section_map = pd.read_csv(self.path_sku_section_map)
-        self.num_sku = len(sku_section_map.columns) - 2
+        df = pd.read_excel(self.path_sku_time_map, sheet_name='Part 1', usecols='C,E')
+        df.dropna(axis=0, how='any', inplace=True)
+        data = df.values
+        self.num_sku = len(data)
         print('所有Sku数量为：%d ' % self.num_sku)
-        sku_time_list=Func_ReadCsv_SkuTime(path_sku_time_map=self.path_sku_time_map, num_sku=self.num_sku)
+
         for i in range(0, self.num_sku):
-            sku_location_list = Func_ReadCsv_SkuSection(i, num_section=self.num_section, data=sku_section_data, section_list=self.section_list)
             sku_input={
-                'name': 'sku_{}'.format(i),  # sku名称
-                'num': i,  # 分区序号
-                'sku_time': sku_time_list[i],  # sku处理所需时间（默认为1）
-                'sku_location_list': sku_location_list  # 后续考虑在表中读取sku的section信息
+                'name': str(int(data[i][0])),  # sku名称
+                'num': i,  # sku序号
+                'sku_time': data[i][1],  # sku处理所需时间（默认为1）
             }
             self.sku_list.append(Sku(sku_input))
-
         # 显示表格
-        print('SkuSection Map:')
-        print_table(self.path_sku_section_map)
-        print('SkuTime Map:')
-        print_table(self.path_sku_time_map)
+        # for sku in self.sku_list:
+            # print('%s'%sku.name+",%d"%sku.num,',%d'%sku.sku_time)
 
     def init_order(self):
-        # 初始化订单，作业顺序表
-        data = np.genfromtxt(self.path_order_sku_map,delimiter=",")  # 打开Excel文件
-        # 获得行数，即有多少个订单
-        self.num_order = sum(1 for line in open(self.path_order_sku_map)) - 1
-        print('所有Order数量为：%d ' % self.num_order)
-        print('SkuOrder Map:')
-        # print_table(self.path_order_sku_map)
+        data = pd.read_excel(self.path_order_sku_map, sheet_name='Part 1', usecols='A,B,C,D',
+                             names=['OrderID', 'CommodityID', 'Amount', 'PosGroupID'])
+        data.dropna(axis=0, how='any', inplace=True)
+        order_num = data['PosGroupID'].groupby(data['OrderID']).count()
+        self.num_order=order_num.size
 
-        for i in range(0, (self.num_order)):
-            # 提炼工序
-            # work_schedule=[]
-            # work_schedule.append(list(work_schedule_dic.items()))
-            work_schedule_dic=Func_ReadCsv_SkuOrder(i=i,num_sku=self.num_sku,data=data,section_list=self.section_list,sku_list=self.sku_list)
-            work_schedule=list(work_schedule_dic.items())
+        for i in range(0,self.num_order):
+            order_name=str(order_num.index[i])
+            order_data = data.loc[data['OrderID'] == order_num.index[i], ['PosGroupID', 'Amount']]
+            # print(order_data)
 
-            # print('order_%d'%i,"的工序为:%s"%work_schedule)
-            time_input={
-                'order_name':'order_{}'.format(i),
-                'now_section_list':[],
-                'time_enter_section':0,
-                'time_start_process':0,
-                'period_process':0,
-                'time_leave_section':0,
-            }
-            order_input={
-                'name': 'order_{}'.format(i),  # 订单名称
-                'num': i,  # 订单序号
-                'work_schedule_dic':work_schedule_dic,
+            result_data = order_data['Amount'].groupby(data['PosGroupID']).sum()
+            work_schedule_origin = []
+            for g in range(len(list(result_data.index))):
+                work_schedule_origin.append([list(result_data.index)[g], list(result_data.values)[g]])
+            # print(work_schedule_origin)
 
-                'work_schedule':work_schedule,
-                'time':Time(time_input)
-            }
+            #在work_schedule中加入主干道的信息
+            work_schedule_dic = {'0': 0, '1': 0, '-1': 0, '2': 0, '3': 0, '-2': 0, '4': 0, '5': 0}
+            for p in range(len(work_schedule_origin)):
+                key_num=int(int(work_schedule_origin[p][0])/100)-17
+                work_schedule_dic[str(key_num)] = work_schedule_origin[p][1]
+            for i in range(6):
+                if (work_schedule_dic[str(i)] == 0):
+                    work_schedule_dic.pop(str(i))
+
+            # work_schedule_dic = {'1701': 0, '1801': 0, '-1': 0, '1901': 0, '2001': 0, '-2': 0, '2101': 0,'2201': 0}
+            # for p in range(len(work_schedule_origin)):
+            #     work_schedule_dic[str(work_schedule_origin[p][0])] = work_schedule_origin[p][1]
+            # for i in range(6):  # 去除无工作的分区
+            #     if (work_schedule_dic[str(i + 17) + '01'] == 0):
+            #         work_schedule_dic.pop(str(i + 17) + '01')
+
+            work_schedule = [[k, v] for k, v in work_schedule_dic.items()]  # 将字典转化为列表
+            # print('[%s'%order_name,']work_schedule:%s'%work_schedule)
+
+            time_input = {'order_name':order_name ,
+                          'now_section_list': [],
+                          'time_enter_section': 0,
+                          'time_start_process': 0,
+                          'period_process': 0,
+                          'time_leave_section': 0}
+
+            order_input = {'name': order_name,  # 订单名称
+                           'num': i,  # 订单序号
+                           'work_schedule': work_schedule,
+                           'time': Time(time_input)}
             self.order_list.append(Order(order_input))
             self.order_notstart.append(Order(order_input))
+        print('所有Order数量为：%d ' % self.num_order)
+        simple_num=0
+        for order in self.order_notstart:
+            if(len(order.work_schedule)==3):
+                simple_num=simple_num+1
+        print('simple_num=%d'%simple_num,',比例为:%.3f'%(simple_num/self.num_order))
+
 
     def Func_Order_filter(self):
         order_fluent = []  # 筛选在mainstream上可以不堵的订单
@@ -190,7 +204,7 @@ class Simulation:
                         if (len(self.section_list[int(work_step[1][0])].waiting_order_list) + len(self.section_list[int(
                                 work_step[1][0])].finish_order_list) == 0):  # 如果第1步等待数量为0，则可以，否则不可以
                             order_fluent.append(order)
-        print('order_fluent:', end='')
+        print('order_fluent%d:'%len(order_fluent), end='')
         display_order_list(order_fluent)
 
         for order_2 in order_fluent:
@@ -224,13 +238,15 @@ class Simulation:
     def Func_Assign_Order(self,time):
         # 1\过滤可能有堵塞问题的订单
         order_can, order_fluent = self.Func_Order_filter()
+
         # 2\按照cost选出影响最小的订单,赋予order_now
         if (len(order_can) > 0):
             # 求出最小cost订单对应的序号（它在order_list中的顺序就是他的num）
             # 所以self.order_list[order_now_num]就是被选派的订单
 
             # order_now = Func_Cost_sequence(order_can, self.section_list,self.order_list,self.order_before_section)
-            order_now = Func_Cost_sequence_better(order_can, self.section_list,self.order_list,self.order_before_section)
+            # order_now = Func_Cost_sequence_better(order_can, self.section_list,self.order_list,self.order_before_section)
+            order_now = Func_Cost_sequence_better_more(order_can, self.section_list,self.order_list,self.order_before_section)
 
         else:
             if (len(order_fluent) != 0):
@@ -259,6 +275,56 @@ class Simulation:
                 self.order_notstart.pop(i)
                 break
 
+    # 新旧代码简单粗暴的结合
+    # def Func_Assign_Order(self, time):
+    #     # 1\过滤可能有堵塞问题的订单
+    #     order_can, order_fluent = self.Func_Order_filter()
+    #
+    #     key = 0
+    #     if (len(order_can) > 0):
+    #         # 求出只有一个section要去的，并且该section的waiting+process为空的订单
+    #         for order in order_can:
+    #             if (len(order.work_schedule) == 3):
+    #                 section_now_num, schedule_now_num = self.Find_Section_now_num(order)
+    #                 section_temp = self.section_list[section_now_num]
+    #                 section_waiting_num = len(section_temp.waiting_order_list) + len(
+    #                     section_temp.process_order_list) + len(section_temp.finish_order_list)
+    #                 if (section_waiting_num == 0):
+    #                     order_now = order
+    #                     key = 1
+    #                     break
+    #         if (key == 0):
+    #             order_now = Func_Cost_sequence_better(order_can, self.section_list, self.order_list,
+    #                                                   self.order_before_section)
+    #             # order_now = order_can[0]
+    #
+    #     else:
+    #         if (len(order_fluent) != 0):
+    #             print("section已满，本轮无订单被派发")
+    #         else:
+    #             print("主干道堵塞，本轮无订单被派发")
+    #         return 0
+    #
+    #     # 3\赋予section_now为order_now第一个不为负的section，得到第一个不为负section的编号和当前order所处的工序
+    #     order_now.now_section_num, order_now.now_schedule_num = self.Find_Section_now_num(order_now)
+    #     print('当前派发的订单为%s' % order_now.name, ',地点为%s' % self.section_list[order_now.now_section_num].name,
+    #           "对应工序序号为%d" % order_now.now_schedule_num, '工序为:%s' % order_now.work_schedule)
+    #
+    #     # 4\在section等待队列中加入订单信息(订单序号，订单在该区用时)
+    #     self.section_list[order_now.now_section_num].Add_to_waiting_order_list(order_now, time)
+    #     # 更新order_before_section：上一个派发订单第一个取得非主路section
+    #     self.order_before_section = order_now.now_section_num
+    #
+    #     # 5\修改订单信息
+    #     # time_enter_section记录
+    #     order_now.time.time_enter_section = time
+    #
+    #     # 6\在未发出订单信息中删除order_now
+    #     for i in range(len(self.order_notstart)):
+    #         if (self.order_notstart[i].name == order_now.name):
+    #             self.order_start.append(self.order_notstart[i])
+    #             self.order_notstart.pop(i)
+    #             break
     # 发网原始算法
     def Func_Assign_Order_Origin(self,time):
         # 1\过滤可能有堵塞问题的订单
@@ -456,7 +522,7 @@ class Simulation:
                 exec("self.y_{}_process.append(len(self.section_list[i].process_order_list))".format(i))
 
     def run(self):
-        for t in range(0,self.T):
+        for t in range(1,self.T):
 
             print("\n")
             print(
@@ -464,7 +530,7 @@ class Simulation:
                 t)
 
         # step1：下发新的订单
-            if(t%self.pace==0):
+            if((t+1)%self.pace==0):
                 if(len(self.order_notstart)!=0):
                     if(self.type=='new'):
                         self.Func_Assign_Order(time=t)
@@ -508,9 +574,9 @@ class Simulation:
             # 显示
             print('\nt=%d' % t, '时刻结束：', end='\n')
             self.display_order_list_mainsec()
-            print('\norder_start:', end='')
+            print('\norder_start%d:'%len(self.order_start), end='')
             display_order_list(self.order_start)
-            print('order_finish:', end='')
+            print('order_finish%d:'%len(self.order_finish), end='')
             display_order_list(self.order_finish)
 
             # 记录主路堵车次数
@@ -542,7 +608,7 @@ if __name__ == "__main__":
 
 
     simulation_config = {
-        'T': 100000,  # 仿真时长
+        'T': 5000000000,  # 仿真时长
         'num_section': 6,
 
         'type':'new',
@@ -550,33 +616,14 @@ if __name__ == "__main__":
         'pace':1,
 
         # # 初始数据
-        # 'path_sku_section_map': cwd + '/input/SkuSectionMap_0922.csv',
-        # 'path_sku_time_map': cwd + '/input/SkuTimeMap_0922.csv',
-        # 'path_order_sku_map': cwd + '/input/OrderSkuMap_0924.csv',
-        #
-        # 'path_order_sku_map': cwd + '/OrderSkuMap_1118.csv',
+        'path_order_sku_map': cwd + '/Fa_data/OrderPickDetail.xlsx',
+        # 'path_order_sku_map': cwd + '/Fa_data/OrderPickDetail_less.xlsx',
+        'path_sku_time_map': cwd + '/Fa_data/PickLinePos_time.xlsx',
 
-        # ONum3432_SNum444
-        # 'path_sku_section_map': cwd + '/datas/ONum3432_SNum444/SkuSectionMap_ONum3432_SNum444_930_heuristic.csv',
-        # 'path_order_sku_map': cwd + '/datas/ONum3432_SNum444/OrderSKUMap_ONum3432_SNum444_930_heuristic.csv',
-        # 'path_sku_time_map': cwd + '//datas/ONum3432_SNum444/SkuTimeMap_SNum444_930_heuristic.csv',
-
-        # # ONum5610_SNum399
-        'path_sku_section_map': cwd + '/datas/ONum5610_SNum399/SkuSectionMap_ONum5610_SNum399_930_heuristic.csv',
-        'path_sku_time_map': cwd + '//datas/ONum5610_SNum399/SkuTimeMap_SNum399_930_heuristic.csv',
-        'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic.csv',
-
-        # 'path_order_sku_map': cwd + '/datas/ONum5610_SNum399/OrderSKUMap_ONum5610_SNum399_930_heuristic_test_1.csv',
-
-        # ONum6544_SNum537
-        # 'path_sku_section_map': cwd + '/datas/ONum6544_SNum537/SkuSectionMap_ONum6544_SNum537_930_heuristic.csv',
-        # 'path_order_sku_map': cwd + '/datas/ONum6544_SNum537/OrderSKUMap_ONum6544_SNum537_930_heuristic.csv',
-        # 'path_sku_time_map': cwd + '//datas/ONum6544_SNum537/SkuTimeMap_SNum537_930_heuristic.csv',
     }
     simulation_1 = Simulation(simulation_config)
 
     simulation_1.run()
-    # simulation_1.run_initorder()
     end = tm.perf_counter()
     print("程序共计用时 : %s Seconds " % (end - start))
 

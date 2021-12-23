@@ -18,7 +18,7 @@ class Sku:
         self.name = sku_config['name']  # sku名称
         self.num = sku_config['num']      # sku序号
         self.sku_time = sku_config['sku_time']  # sku处理所需时间
-        self.sku_location_list = sku_config['sku_location_list']  # sku所在分区信息
+        # self.sku_location_list = sku_config['sku_location_list']  # sku所在分区信息
 
 
 class Section:
@@ -87,8 +87,6 @@ class Order:
     def __init__(self, order_config):
         self.name = order_config['name']  # 订单名称
         self.num = order_config['num']  # 订单编号
-        # 字典形式存储的作业顺序表
-        self.work_schedule_dic = order_config['work_schedule_dic']
 
         self.work_schedule = order_config['work_schedule']  # 作业顺序表
         self.now_schedule_num = -1  # 当前工序对应序号
@@ -113,6 +111,7 @@ class Order:
             else:
                 # cost = 1 *（sec0等待队列 + order在sec0处理时间）+0.8 *（sec1等待队列 +
                 # order在sec1处理时间）+0.5 *（sec2等待队列 + order在sec2处理时间）
+
                 try:
                     section_waiting_num = len(section_list[int(self.work_schedule[i][0])].waiting_order_list) + len(section_list[int(
                         self.work_schedule[i][0])].process_order_list) + len(section_list[int(self.work_schedule[i][0])].finish_order_list)
